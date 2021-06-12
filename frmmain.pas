@@ -36,7 +36,8 @@ interface
 uses
   Classes, SysUtils, SQLite3Conn, SQLDB, DB, Forms, Controls, Graphics, Dialogs,
   EditBtn, StdCtrls, DBGrids, ComCtrls, DBCtrls, ExtCtrls, Spin, MaskEdit,
-  SQLiteWrap, geopackagewkb, geopackagedrawer, BGRABitmap, BGRABitmapTypes;
+  Menus, SQLiteWrap, geopackagewkb, geopackagedrawer, BGRABitmap,
+  BGRABitmapTypes;
 
 type
 
@@ -48,9 +49,11 @@ type
     ZoomLevel: integer;
   end;
 
+
   TForm1 = class(TForm)
     btnDraw: TButton;
     btnFillColor: TColorButton;
+    btnOceanColor: TColorButton;
     btnFilter: TButton;
     btnLineColor: TColorButton;
     btnBackgroundColor: TColorButton;
@@ -69,6 +72,7 @@ type
     cbGrid: TComboBox;
     cbClipLat: TCheckBox;
     cbOnlyDrawPoints: TCheckBox;
+    cbPreFillOceans: TCheckBox;
     DataSource1: TDataSource;
     DataSourceSlave: TDataSource;
     dsQueryDB: TDataSource;
@@ -77,6 +81,7 @@ type
     DBGrid3: TDBGrid;
     DBNavigator1: TDBNavigator;
     edBackgroundColor: TMaskEdit;
+    edOceanColor: TMaskEdit;
     edQuery: TEdit;
     edLineColor: TMaskEdit;
     edFilter: TEdit;
@@ -88,7 +93,13 @@ type
     Label14: TLabel;
     lbBgraBitmap: TLabel;
     lbProjLib: TLabel;
+    lbRepoUrl1: TLabel;
     lbSQLite: TLabel;
+    miSetOrigin: TMenuItem;
+    miDraw: TMenuItem;
+    miCopyToGeoJson: TMenuItem;
+    PopupMenu1: TPopupMenu;
+    PopupMenuGraphic: TPopupMenu;
     ScrollBox1: TScrollBox;
     sePointRadius: TFloatSpinEdit;
     seLineWidth: TFloatSpinEdit;
@@ -128,6 +139,7 @@ type
     procedure btnDrawMapProjClick(Sender: TObject);
     procedure btnFillColorColorChanged(Sender: TObject);
     procedure btnLineColorColorChanged(Sender: TObject);
+    procedure btnOceanColorColorChanged(Sender: TObject);
     procedure btnOpenClick(Sender: TObject);
     procedure btnFilterClick(Sender: TObject);
     procedure btnQueryExecClick(Sender: TObject);
@@ -140,6 +152,7 @@ type
     procedure edBackgroundColorEditingDone(Sender: TObject);
     procedure edFillColorEditingDone(Sender: TObject);
     procedure edLineColorEditingDone(Sender: TObject);
+    procedure edOceanColorEditingDone(Sender: TObject);
     procedure FileNameEdit1AcceptFileName(Sender: TObject; var Value: string);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -148,6 +161,9 @@ type
     procedure lbRepoUrlClick(Sender: TObject);
     procedure lbSQLiteClick(Sender: TObject);
     procedure lbStyleClick(Sender: TObject);
+    procedure miCopyToGeoJsonClick(Sender: TObject);
+    procedure miDrawClick(Sender: TObject);
+    procedure miSetOriginClick(Sender: TObject);
     procedure PaintBox1MouseLeave(Sender: TObject);
     procedure PaintBox1MouseMove(Sender: TObject; Shift: TShiftState;
       X, Y: integer);
@@ -158,12 +174,14 @@ type
     geopackagewkb: TGeoPackage;
     graphic: TGraphicProps;
     BitmapMapa: TBGRABitmap;
-    projDefaultPath:string;
-    Drawer:TGeoPackageDrawer;
+    projDefaultPath: string;
+    Drawer: TGeoPackageDrawer;
+    procedure DrawMap(aDrawer: TGeoPackageDrawer);
     procedure FillLabelFieldNames;
     procedure LoadSettings;
     procedure Open(const aFileName: string);
     procedure SaveSettings;
+    procedure SetupDrawer(aDrawer: TGeoPackageDrawer);
   public
 
   end;
@@ -178,27 +196,26 @@ uses
   {$IFDEF USE_PROJ7}
   geopackagedrawerproj,
   {$ENDIF}
-
-  bgracolorutils,wkb2geojsonu,Clipbrd;
+  bgracolorutils, wkb2geojsonu, Clipbrd;
 
 {$R *.lfm}
 
 { TForm1 }
 const
-  GridInterval:array[0..6] of TDrawInterval = (di0, di5,di10,di15,di30,di45,di90);
+  GridInterval: array[0..6] of TDrawInterval = (di0, di5, di10, di15, di30, di45, di90);
 
-function Spaces2Zeros(const aText:string):string;
+function Spaces2Zeros(const aText: string): string;
 var
- wI:integer;
+  wI: integer;
 begin
- result:=aText;
- for wI := 1 to Length(result) do
- begin
-   if result[wI]=' ' then
-   begin
-     result[wI]:='0';
-   end;
- end;
+  Result := aText;
+  for wI := 1 to Length(Result) do
+  begin
+    if Result[wI] = ' ' then
+    begin
+      Result[wI] := '0';
+    end;
+  end;
 end;
 
 procedure TForm1.Open(const aFileName: string);
@@ -226,56 +243,87 @@ begin
 end;
 
 procedure TForm1.btnDrawClick(Sender: TObject);
+begin
+  DrawMap(TGeoPackageDrawer.Create(BitmapMapa, seZoom.Value, seLat.Value, seLon.Value));
+end;
+
+procedure TForm1.SetupDrawer(aDrawer: TGeoPackageDrawer);
+begin
+  if cbClipLat.Checked then
+    Drawer.SetLatBounds(-85.05112878, 85.05112878)
+  else
+    aDrawer.SetLatBounds(-90.0, 90.0);
+  aDrawer.OnlyDrawPoints := cbOnlyDrawPoints.Checked;
+  if seZoom.Value < 4 then
+    aDrawer.GridTileSize := 8
+  else
+    aDrawer.GridTileSize := 16;
+  aDrawer.FillColor := HTmlColorToTBGRAPixel(Spaces2Zeros(edFillColor.Text), clGreen);
+  aDrawer.BorderColor := HTmlColorToTBGRAPixel(Spaces2Zeros(edLineColor.Text), clRed);
+  aDrawer.LineWidth := seLineWidth.Value;
+  aDrawer.PointRadius := sePointRadius.Value;
+  aDrawer.FontHeigth := seFontHeight.Value;
+end;
+
+procedure TForm1.DrawMap(aDrawer: TGeoPackageDrawer);
 var
-  wDrawer: TGeoPackageDrawer;
   wType: string;
-  wOldCursor:TCursor;
+  wOldCursor: TCursor;
+  wColor: TBGRAPixel;
 begin
   if cbClearBitmap.Checked then
-    BitmapMapa.Fill(HTmlColorToTBGRAPixel(Spaces2Zeros(edBackgroundColor.Text),BGRA(255,255,255,255)));
-
+    BitmapMapa.Fill(HTmlColorToTBGRAPixel(Spaces2Zeros(edBackgroundColor.Text),
+      BGRA(255, 255, 255, 255)));
   wType := SQLQuery1.FieldByName('data_type').AsString;
   if (wType <> 'tiles') and (wType <> 'features') then
   begin
     ShowMessage('Draw not implemented for this table type');
     Exit;
   end;
-  wOldCursor:=Screen.Cursor;
-  SCreen.Cursor:=crHourGlass;
+  wOldCursor := Screen.Cursor;
+  SCreen.Cursor := crHourGlass;
   Drawer.Free;
-  Drawer:=nil;
-  wDrawer := TGeoPackageDrawer.Create(BitmapMapa, seZoom.Value, seLat.Value, seLon.Value);
-  wDrawer.OnlyDrawPoints:=cbOnlyDrawPoints.Checked;
-  Drawer:=wDrawer;
+  Drawer := nil;
+  SetupDrawer(aDrawer);
+  Drawer := aDrawer;
+  if not aDrawer.IsProjValid then
+  begin
+    ShowMessage('Error creating proj. Invalid string?');
+    Exit;
+  end;
   try
-    wDrawer.FillColor := HTmlColorToTBGRAPixel(Spaces2Zeros(edFillColor.Text),clGreen);
-    wDrawer.BorderColor :=HTmlColorToTBGRAPixel(Spaces2Zeros(edLineColor.Text),clRed);
-    wDrawer.LineWidth := seLineWidth.Value;
-    wDrawer.PointRadius := sePointRadius.Value;
-
-    graphic.Pos0.Y := wDrawer.LatOrigin;
-    graphic.Pos0.X := wDrawer.LonOrigin;
-    graphic.X0 := wDrawer.XOrigin;
-    graphic.Y0 := wDrawer.YOrigin;
+    if cbClearBitmap.Checked and cbPreFillOceans.Checked then
+    begin
+      wColor := HTmlColorToTBGRAPixel(edOceanColor.Text, BGRA(180, 225, 250));
+      if aDrawer.FRadio > 0 then
+        BitmapMapa.EllipseAntialias(aDrawer.FCenter.x, aDrawer.FCenter.y,
+          aDrawer.FRadio, aDrawer.FRadio,
+          BGRA(0, 0, 0), 1, wColor)
+      else
+        aDrawer.DrawFilledGrid(wColor, wColor, di10, 1);
+    end;
+    graphic.Pos0.Y := aDrawer.LatOrigin;
+    graphic.Pos0.X := aDrawer.LonOrigin;
+    graphic.X0 := aDrawer.XOrigin;
+    graphic.Y0 := aDrawer.YOrigin;
     graphic.ZoomLevel := seZoom.Value;
 
     if wType = 'tiles' then
     begin
-      wDrawer.DrawTiles(geopackagewkb, SQLQuery1.FieldByName('table_name').AsString,seOpacity.Value);
+      aDrawer.DrawTiles(geopackagewkb, SQLQuery1.FieldByName(
+        'table_name').AsString, seOpacity.Value);
     end
     else
     begin // wType='features'
-      wDrawer.FontHeigth:=seFontHeight.Value;
-      wDrawer.DrawFeatures(geopackagewkb,SQLQuery1.FieldByName('table_name').AsString,cbLabelField.Text,edFilter.Text);
-      wDrawer.DrawLabels;
+      aDrawer.DrawFeatures(geopackagewkb, SQLQuery1.FieldByName(
+        'table_name').AsString, cbLabelField.Text, edFilter.Text);
+      aDrawer.DrawLabels;
     end;
-
-    if cbGrid.ItemIndex>0 then
-      wDrawer.DrawGrid(BGRA(127,127,127),GridInterval[cbGrid.ItemIndex]);
-
+    if cbGrid.ItemIndex > 0 then
+      aDrawer.DrawGrid(BGRA(127, 127, 127), GridInterval[cbGrid.ItemIndex], 1.5);
   finally
-    //wDrawer.Free;  // On FormDestroy.
-    Screen.Cursor:=wOldCursor;
+    //aDrawer.Free; //On FormDestroy
+    Screen.Cursor := wOldCursor;
   end;
   tbsGeo.ActivePageIndex := 1;
 end;
@@ -283,88 +331,23 @@ end;
 {$IFDEF USE_PROJ7}
 procedure TForm1.btnDrawMapProjClick(Sender: TObject);
 var
-  wDrawer: TGeoPackageDrawerProj;
-  wType: string;
-  wOldCursor:TCursor;
-  wProjectionString:string;
-  wP:integer;
+  wProjectionString: string;
+  wP: integer;
 begin
-  if cbClearBitmap.Checked then
-    BitmapMapa.Fill(HTmlColorToTBGRAPixel(Spaces2Zeros(edBackgroundColor.Text),BGRA(255,255,255,255)));
-
-  wType := SQLQuery1.FieldByName('data_type').AsString;
-  if (wType <> 'tiles') and (wType <> 'features') then
-  begin
-    ShowMessage('Draw not implemented for this table type');
-    Exit;
-  end;
-  wOldCursor:=Screen.Cursor;
-  SCreen.Cursor:=crHourGlass;
-  wProjectionString:=cbProjection.Text;
+  wProjectionString := cbProjection.Text;
   //{name of the projection} +proj ...    or +proj ...
-  wP:=Pos('}',wProjectionString);
-  if wP>0 then
+  wP := Pos('}', wProjectionString);
+  if wP > 0 then
   begin
     Inc(wP);
-    while (wP<length(wProjectionString)) and (wProjectionString[wP]=' ') do
+    while (wP < length(wProjectionString)) and (wProjectionString[wP] = ' ') do
       Inc(wP);
-    wProjectionString:=Copy(wProjectionString,wP,length(wProjectionString)-wP+1);
+    wProjectionString := Copy(wProjectionString, wP, length(wProjectionString) - wP + 1);
   end;
-  Drawer.Free;
-  Drawer:=nil;
-  wDrawer := TGeoPackageDrawerProj.Create(BitmapMapa, seZoom.Value, seLat.Value, seLon.Value,wProjectionString);
-  if cbClipLat.Checked then
-    wDrawer.SetLatBounds(-85.05112878,85.05112878)
-  else
-    wDrawer.SetLatBounds(-90.0,90.0);
-  wDrawer.OnlyDrawPoints:=cbOnlyDrawPoints.Checked;
-  Drawer:=wDrawer;
-  if not wDrawer.IsProjValid then
-  begin
-    ShowMessage('Error creating proj. Invalid string?');
-  end;
-  //wDrawer.SetupProjection;
- //wDrawer.SetupProjection('EPSG:3857');
-  // ojo latitud negativa.
-  //wDrawer.SetupProjection('+proj=ortho +lat_0=-42.5333333333 +lon_0=-0.5 +x_0=0 +y_0=0 +ellps=sphere +units=m +no_defs');
-  //wDrawer.SetupProjection('ESRI:54009');
-  //wDrawer.SetupProjection('+proj=cea +lon_0=0 +lat_ts=45 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs');  // gall-peters
-  //wDrawer.SetupProjection(cbProjection.Text);
-  if seZoom.Value<4 then
-    wDrawer.GridTileSize:=8
-  else
-    wDrawer.GridTileSize:=16;
-  try
-    wDrawer.FillColor := HTmlColorToTBGRAPixel(Spaces2Zeros(edFillColor.Text),clGreen); //btnFillColor.ButtonColor;
-    wDrawer.BorderColor :=HTmlColorToTBGRAPixel(Spaces2Zeros(edLineColor.Text),clRed);  //btnLineColor.ButtonColor;
-    wDrawer.LineWidth := seLineWidth.Value;
-    wDrawer.PointRadius := sePointRadius.Value;
-
-    graphic.Pos0.Y := wDrawer.LatOrigin;
-    graphic.Pos0.X := wDrawer.LonOrigin;
-    graphic.X0 := wDrawer.XOrigin;
-    graphic.Y0 := wDrawer.YOrigin;
-    graphic.ZoomLevel := seZoom.Value;
-
-    if wType = 'tiles' then
-    begin
-      wDrawer.DrawTiles(geopackagewkb, SQLQuery1.FieldByName('table_name').AsString,seOpacity.Value);
-    end
-    else
-    begin // wType='features'
-      wDrawer.FontHeigth:=seFontHeight.Value;
-      wDrawer.DrawFeatures(geopackagewkb,SQLQuery1.FieldByName('table_name').AsString,cbLabelField.Text,edFilter.Text);
-      wDrawer.DrawLabels;
-    end;
-    if cbGrid.ItemIndex>0 then
-      wDrawer.DrawGrid(BGRA(127,127,127),GridInterval[cbGrid.ItemIndex],1.5);
-
-  finally
-    //wDrawer.Free; //On FormDestroy
-    Screen.Cursor:=wOldCursor;
-  end;
-  tbsGeo.ActivePageIndex := 1;
+  DrawMap(TGeoPackageDrawerProj.Create(BitmapMapa, seZoom.Value,
+    seLat.Value, seLon.Value, wProjectionString));
 end;
+
 {$ELSE}
 procedure TForm1.btnDrawMapProjClick(Sender: TObject);
 begin
@@ -399,8 +382,8 @@ procedure TForm1.btnResizeClick(Sender: TObject);
 begin
   BitmapMapa.Free;
   BitmapMapa := TBGRABitmap.Create(seBitmapWidth.Value, seBitmapHeight.Value, clWhite);
-  ScrollBox1.VertScrollBar.Range:=BitmapMapa.Height - ScrollBox1.Height;
-  ScrollBox1.HorzScrollBar.Range:=BitmapMapa.width - ScrollBox1.Width;
+  ScrollBox1.VertScrollBar.Range := BitmapMapa.Height - ScrollBox1.Height;
+  ScrollBox1.HorzScrollBar.Range := BitmapMapa.Width - ScrollBox1.Width;
 end;
 
 procedure TForm1.btnSaveClick(Sender: TObject);
@@ -431,44 +414,6 @@ begin
   seLon.Value := SQLQuery1.FieldByName('min_x').AsFloat;
 end;
 
-{
-function EscapeString(const AValue: string): string;
-const
-  ESCAPE = '\';
-  QUOTATION_MARK = '"';
-  REVERSE_SOLIDUS = '\';
-  SOLIDUS = '/';
-  BACKSPACE = #8;
-  FORM_FEED = #12;
-  NEW_LINE = #10;
-  CARRIAGE_RETURN = #13;
-  HORIZONTAL_TAB = #9;
-var
-  AChar: Char;
-begin
-  Result := '';
-  for AChar in AValue do
-  begin
-    case AChar of
-      QUOTATION_MARK: Result := Result + ESCAPE + QUOTATION_MARK;
-      REVERSE_SOLIDUS: Result := Result + ESCAPE + REVERSE_SOLIDUS;
-      SOLIDUS: Result := Result + ESCAPE + SOLIDUS;
-      BACKSPACE: Result := Result + ESCAPE + 'b';
-      FORM_FEED: Result := Result + ESCAPE + 'f';
-      NEW_LINE: Result := Result + ESCAPE + 'n';
-      CARRIAGE_RETURN: Result := Result + ESCAPE + 'r';
-      HORIZONTAL_TAB: Result := Result + ESCAPE + 't';
-      else
-      begin
-        if (Integer(AChar) < 32) {or (Integer(AChar) > 126)} then
-          Result := Result + ESCAPE + 'u' + IntToHex(Integer(AChar), 4)
-        else
-          Result := Result + AChar;
-      end;
-    end;
-  end;
-end;
-}
 
 function EscapeString(const AValue: string): string;
 const
@@ -482,25 +427,27 @@ const
   CARRIAGE_RETURN = #13;
   HORIZONTAL_TAB = #9;
 var
-  AChar: Char;
-  wL,wP:integer;
-  wNewStr:string;
+  AChar: char;
+  wL, wP: integer;
+  wNewStr: string;
 
-  procedure AddEscapedChar(aC:char);
+  procedure AddEscapedChar(aC: char);
   begin
-    wNewStr[wP]:=ESCAPE;
+    wNewStr[wP] := ESCAPE;
     Inc(wP);
-    wNewStr[wP]:=aC;
+    wNewStr[wP] := aC;
     Inc(wP);
   end;
-  procedure AddChar(aC:char);
+
+  procedure AddChar(aC: char);
   begin
-    wNewStr[wP]:=aC;
+    wNewStr[wP] := aC;
     Inc(wP);
   end;
-  procedure AddString(const aStr:string);
+
+  procedure AddString(const aStr: string);
   var
-    wC:char;
+    wC: char;
   begin
     for wC in aStr do
       AddChar(wC);
@@ -508,11 +455,11 @@ var
 
 begin
   Result := '';
-  wL:=Length(aValue);
-  if wL=0 then
+  wL := Length(aValue);
+  if wL = 0 then
     Exit;
-  SetLength(wNewStr,wL*5);  // uXXXX 5 max replaced length for char.
-  wP:=1;
+  SetLength(wNewStr, wL * 5);  // uXXXX 5 max replaced length for char.
+  wP := 1;
   for AChar in AValue do
   begin
     case AChar of
@@ -526,33 +473,35 @@ begin
       HORIZONTAL_TAB: AddEscapedChar('t');
       else
       begin
-        if (Integer(AChar) < 32) {or (Integer(AChar) > 126)} then
+        if (integer(AChar) < 32) {or (Integer(AChar) > 126)} then
         begin
           AddEscapedChar('u');
-          AddString(IntToHex(Integer(AChar), 4));
+          AddString(IntToHex(integer(AChar), 4));
         end
         else
           AddChar(AChar);
       end;
     end;
   end;
-  SetLength(wNewStr,wP-1);
-  result:=wNewStr;
+  SetLength(wNewStr, wP - 1);
+  Result := wNewStr;
 end;
 
 procedure TForm1.btnToGeoJsonClick(Sender: TObject);
 var
   fstream: TStream;
   fdata: TMemoryStream;
-  wToGJ:wkb2GeoJson;
-  wGeoJson:string;
-  wI:integer;
-  wFieldName:string;
-  wFieldType:TFieldType;
-  wLastField:integer;
-  wOldDS:char;
+  wToGJ: wkb2GeoJson;
+  wGeoJson: string;
+  wI: integer;
+  wFieldName: string;
+  wFieldType: TFieldType;
+  wLastField: integer;
+  wOldDS: char;
 begin
   if SQLQuerySlave.BOF and SQLQuerySlave.EOF then
+    Exit;
+  if SQLQuerySlave.FindField('geom')=nil then
     Exit;
   if not (tblobfield(SQLQuerySlave.FieldByName('geom')).IsNull) then
   begin
@@ -561,45 +510,47 @@ begin
     try
       fdata.LoadFromStream(fstream);
       wGeoJson := '{' + LineEnding;
-      wGeoJson := wGeoJson + '  "type": "FeatureCollection",'+LineEnding;
-      wGeoJson := wGeoJson + '  "features": ['+LineEnding;
+      wGeoJson := wGeoJson + '  "type": "FeatureCollection",' + LineEnding;
+      wGeoJson := wGeoJson + '  "features": [' + LineEnding;
       //-----
       wGeoJson := wGeoJson + '{' + LineEnding;
       wGeoJson := wGeoJson + '"type": "Feature",' + LineEnding;
-      wToGJ.GeometryToGeoJson(fdata.Memory, fdata.Size,2);
-      wGeoJson := wGeoJson+wToGJ.FGJString;
-      wGeoJson := wGeoJson + ','+LineEnding;
-      wGeoJson := wGeoJson + '"properties": {'+LineEnding;
-      wLastField:=SQLQuerySlave.Fields.Count-1;
-      wOldDS:=FormatSettings.DecimalSeparator;
-      FormatSettings.DecimalSeparator:='.';
+      wToGJ.GeometryToGeoJson(fdata.Memory, fdata.Size, 2);
+      wGeoJson := wGeoJson + wToGJ.FGJString;
+      wGeoJson := wGeoJson + ',' + LineEnding;
+      wGeoJson := wGeoJson + '"properties": {' + LineEnding;
+      wLastField := SQLQuerySlave.Fields.Count - 1;
+      wOldDS := FormatSettings.DecimalSeparator;
+      FormatSettings.DecimalSeparator := '.';
 
       for wI := 0 to wLastField do
       begin
-        wFieldName:=LowerCase(SQLQuerySlave.Fields[wI].FieldName);
-        wFieldType:=SQLQuerySlave.Fields[wI].DataType;
-        if wFieldName<>'geom' then
+        wFieldName := LowerCase(SQLQuerySlave.Fields[wI].FieldName);
+        wFieldType := SQLQuerySlave.Fields[wI].DataType;
+        if wFieldName <> 'geom' then
         begin
-          wGeoJson := wGeoJson + '  "'+wFieldName+'": ';
-          if wFieldType in [ftUnknown,ftBlob,ftGraphic, ftFmtMemo, ftParadoxOle, ftDBaseOle,
-            ftTypedBinary, ftCursor,ftOraBlob, ftOraClob, ftVariant, ftInterface, ftIDispatch ] then
-             continue;
-          if wFieldType in [ftSmallint, ftInteger, ftWord, ftBoolean, ftFloat, ftCurrency, ftBCD, ftAutoInc,ftLargeInt,ftFMTBcd] then
-            wGeoJson:=wGeoJson+SQLQuerySlave.Fields[wI].AsString
-           else
-             wGeoJson:=wGeoJson+'"'+EscapeString(SQLQuerySlave.Fields[wI].AsString)+'"';
-           if wI<wLastField then
-             wGeoJson := wGeoJson + ','+LineEnding;
+          wGeoJson := wGeoJson + '  "' + wFieldName + '": ';
+          if wFieldType in [ftUnknown, ftBlob, ftGraphic, ftFmtMemo,
+            ftParadoxOle, ftDBaseOle, ftTypedBinary, ftCursor, ftOraBlob,
+            ftOraClob, ftVariant, ftInterface, ftIDispatch] then
+            continue;
+          if wFieldType in [ftSmallint, ftInteger, ftWord, ftBoolean,
+            ftFloat, ftCurrency, ftBCD, ftAutoInc, ftLargeInt, ftFMTBcd] then
+            wGeoJson := wGeoJson + SQLQuerySlave.Fields[wI].AsString
+          else
+            wGeoJson := wGeoJson + '"' + EscapeString(SQLQuerySlave.Fields[wI].AsString) + '"';
+          if wI < wLastField then
+            wGeoJson := wGeoJson + ',' + LineEnding;
         end;
       end;
-      FormatSettings.DecimalSeparator:=wOldDS;
-      wGeoJson := wGeoJson + '}'+LineEnding;
-      wGeoJson := wGeoJson + '}'+LineEnding;
+      FormatSettings.DecimalSeparator := wOldDS;
+      wGeoJson := wGeoJson + '}' + LineEnding;
+      wGeoJson := wGeoJson + '}' + LineEnding;
       //-----
-      wGeoJson := wGeoJson + ']'+LineEnding;
-      wGeoJson := wGeoJson + '}'+LineEnding;
+      wGeoJson := wGeoJson + ']' + LineEnding;
+      wGeoJson := wGeoJson + '}' + LineEnding;
 
-      Clipboard.AsText:=wGeoJson;
+      Clipboard.AsText := wGeoJson;
       //ShowMessage(wGeoJson);
 
     finally
@@ -609,11 +560,9 @@ begin
   end;
 end;
 
-
-
 procedure TForm1.cbTablesChange(Sender: TObject);
 begin
-  edQuery.Text:='select * from '+cbTables.Text;
+  edQuery.Text := 'select * from ' + cbTables.Text;
   btnQueryExecClick(Self);
 end;
 
@@ -624,7 +573,7 @@ end;
 
 procedure TForm1.btnBackgroundColorColorChanged(Sender: TObject);
 begin
-  edBackgroundColor.Text:=BGRAPixelToHTml(btnBackgroundColor.ButtonColor);
+  edBackgroundColor.Text := BGRAPixelToHTml(btnBackgroundColor.ButtonColor);
 end;
 
 procedure TForm1.edFillColorEditingDone(Sender: TObject);
@@ -634,17 +583,27 @@ end;
 
 procedure TForm1.btnFillColorColorChanged(Sender: TObject);
 begin
-  edFillColor.Text:=BGRAPixelToHTml(btnFillColor.ButtonColor);
+  edFillColor.Text := BGRAPixelToHTml(btnFillColor.ButtonColor);
 end;
 
 procedure TForm1.btnLineColorColorChanged(Sender: TObject);
 begin
-  edLineColor.Text:=BGRAPixelToHTml(btnLineColor.ButtonColor);
+  edLineColor.Text := BGRAPixelToHTml(btnLineColor.ButtonColor);
+end;
+
+procedure TForm1.btnOceanColorColorChanged(Sender: TObject);
+begin
+  edOceanColor.Text := BGRAPixelToHTml(btnOceanColor.ButtonColor);
 end;
 
 procedure TForm1.edLineColorEditingDone(Sender: TObject);
 begin
   btnLineColor.ButtonColor := HTmlColorToTColor(Spaces2Zeros(edLineColor.Text));
+end;
+
+procedure TForm1.edOceanColorEditingDone(Sender: TObject);
+begin
+  btnOceanColor.ButtonColor := HTmlColorToTColor(Spaces2Zeros(edOceanColor.Text));
 end;
 
 procedure TForm1.FileNameEdit1AcceptFileName(Sender: TObject; var Value: string);
@@ -654,8 +613,8 @@ end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  Drawer:=nil;
-  pnlStyle.Visible:=false;
+  Drawer := nil;
+  pnlStyle.Visible := False;
   LoadSettings;
   graphic.Pos0.Y := 0;
   graphic.Pos0.X := 0;
@@ -663,15 +622,15 @@ begin
   graphic.Y0 := -1;
   graphic.ZoomLevel := -1;
   BitmapMapa := TBGRABitmap.Create(seBitmapWidth.Value, seBitmapHeight.Value, clWhite);
-  ScrollBox1.VertScrollBar.Range:=BitmapMapa.Height - ScrollBox1.Height;
-  ScrollBox1.HorzScrollBar.Range:=BitmapMapa.width - ScrollBox1.Width;
-  ScrollBox1.VertScrollBar.Increment:=60;
-  ScrollBox1.VertScrollBar.Page:=240;
-  ScrollBox1.HorzScrollBar.Increment:=60;
-  ScrollBox1.HorzScrollBar.Page:=240;
-  geopackagewkb:=TGeoPackage.Create;
+  ScrollBox1.VertScrollBar.Range := BitmapMapa.Height - ScrollBox1.Height;
+  ScrollBox1.HorzScrollBar.Range := BitmapMapa.Width - ScrollBox1.Width;
+  ScrollBox1.VertScrollBar.Increment := 60;
+  ScrollBox1.VertScrollBar.Page := 240;
+  ScrollBox1.HorzScrollBar.Increment := 60;
+  ScrollBox1.HorzScrollBar.Page := 240;
+  geopackagewkb := TGeoPackage.Create;
   {$IFDEF USE_PROJ7}
-     ProjInit(projDefaultPath);  //default path in windows.
+  ProjInit(projDefaultPath);  //default path in windows.
   {$ELSE}
      lbProjection.visible:=false;
      cbProjection.visible:=false;
@@ -685,7 +644,7 @@ begin
   geopackagewkb.Free;
   BitmapMapa.Free;
   {$IFDEF USE_PROJ7}
-     ProjFinalize;
+  ProjFinalize;
   {$ENDIF}
 end;
 
@@ -701,7 +660,7 @@ end;
 
 procedure TForm1.lbRepoUrlClick(Sender: TObject);
 begin
-  OpenUrl(lbRepoUrl.Caption);
+  OpenUrl(TLabel(Sender).Caption);
 end;
 
 procedure TForm1.lbSQLiteClick(Sender: TObject);
@@ -711,8 +670,77 @@ end;
 
 procedure TForm1.lbStyleClick(Sender: TObject);
 begin
-  pnlStyle.Visible:= not pnlStyle.Visible;
+  pnlStyle.Visible := not pnlStyle.Visible;
 end;
+
+procedure TForm1.miCopyToGeoJsonClick(Sender: TObject);
+begin
+  btnToGeoJsonClick(Self);
+end;
+
+procedure TForm1.miDrawClick(Sender: TObject);
+var
+  fstream: TStream;
+  fdata: TMemoryStream;
+begin
+  if SQLQuerySlave.BOF and SQLQuerySlave.EOF then
+    Exit;
+  if SQLQuery1.FieldByName('data_type').AsString <> 'features' then
+    Exit;
+  if Drawer = nil then
+    Exit;
+  fstream := nil;
+  fdata := nil;
+  if SQLQuerySlave.FindField('geom')=nil then
+    Exit;
+  if not (tblobfield(SQLQuerySlave.FieldByName('geom')).IsNull) then
+  begin
+    fstream := SQLQuerySlave.CreateBlobStream(SQLQuerySlave.FieldByName('geom'), bmread);
+    fdata := TMemoryStream.Create;
+    try
+      fdata.LoadFromStream(fstream);
+      SetupDrawer(Drawer);
+      Drawer.Draw(fdata.Memory, fdata.Size);
+      if cbLabelField.Text <> '' then
+      begin
+        Drawer.ClearLabels;
+        Drawer.AddLabel(SQLQuerySlave.FieldByName(cbLabelField.Text).AsString,
+          0, Drawer.FontHeigth);
+        Drawer.DrawLabels;
+      end;
+    finally
+      fstream.Free;
+      fdata.Free;
+    end;
+    tbsGeo.ActivePageIndex := 1;
+  end;
+end;
+
+procedure TForm1.miSetOriginClick(Sender: TObject);
+var
+  wLat, wLon: double;
+  X,Y:integer;
+  wPoint:TPoint;
+begin
+  if graphic.X0 <> -1 then
+  begin
+    if Drawer <> nil then
+    begin
+      wPoint:=ScrollBox1.ScreenToClient(PopupMenuGraphic.PopupPoint);
+      if Drawer.PixelXYToCoord(graphic.X0 + wPoint.X, graphic.Y0 + wPoint.Y, wLat, wLon) then
+      begin
+        //ShowMessage('Lat: ' + FormatFloat('0.00000', wLat) + ' Lon: ' + FormatFloat('0.00000', wLon))
+        seLat.Value:=wLat;
+        seLon.Value:=wLon;
+      end
+      else
+      begin
+        //ShowMessage('Lat: inf Lon: inf');
+      end;
+    end;
+  end;
+end;
+
 
 procedure TForm1.ScrollBox1Paint(Sender: TObject);
 begin
@@ -734,7 +762,8 @@ var
   fSltb: TSQLiteTable;
 begin
   cbTables.Items.Clear;
-  fSltb := geopackagewkb.Database.GetTable('SELECT name FROM sqlite_master WHERE type =''table'' AND name NOT LIKE ''sqlite_%''');
+  fSltb := geopackagewkb.Database.GetTable(
+    'SELECT name FROM sqlite_master WHERE type =''table'' AND name NOT LIKE ''sqlite_%''');
   try
     cbTables.Items.Clear;
     while fSltb.EOF = False do
@@ -745,7 +774,7 @@ begin
   finally
     fSltb.Free;
   end;
-  cbTables.ItemIndex:=0;
+  cbTables.ItemIndex := 0;
 end;
 
 procedure TForm1.FillLabelFieldNames;
@@ -779,12 +808,12 @@ var
 begin
   if graphic.X0 <> -1 then
   begin
-    if Drawer<>nil then
+    if Drawer <> nil then
     begin
-      Drawer.PixelXYToCoord(graphic.X0 + X, graphic.Y0 + Y,  wLat, wLon);
-//      PixelXYToLatLong(graphic.X0 + X, graphic.Y0 + Y, graphic.ZoomLevel, wLat, wLon);
-      StatusBar1.Panels[0].Text :=
-        'Lat: ' + FormatFloat('0.00000', wLat) + ' Lon: ' + FormatFloat('0.00000', wLon);
+      if Drawer.PixelXYToCoord(graphic.X0 + X, graphic.Y0 + Y, wLat, wLon) then
+        StatusBar1.Panels[0].Text := 'Lat: ' + FormatFloat('0.00000', wLat) + ' Lon: ' + FormatFloat('0.00000', wLon)
+      else
+        StatusBar1.Panels[0].Text := 'Lat: inf Lon: inf';
     end;
   end;
 end;
@@ -794,6 +823,7 @@ const
   DEF_BACKGROUND_COLOR = '#FFFFFFFF';
   DEF_LINE_COLOR = '#FF0000FF';
   DEF_FILL_COLOR = '#00FF00FF';
+  DEF_OCEAN_COLOR = '#B4E1FAFF';
 
 procedure TForm1.SaveSettings;
 var
@@ -810,7 +840,7 @@ begin
       // if SomeValue has the default value the entry is not stored,
       // so only the differences to the default are stored.
       // This way the xml is kept short and defaults may change in future.
-      Config.SetDeleteValue('ProjDefaultPath',projDefaultPath,'');
+      Config.SetDeleteValue('ProjDefaultPath', projDefaultPath, '');
       Config.SetDeleteValue('DefaultFile', FilenameEdit1.Text, '');
       Config.SetDeleteValue('Filter', edFilter.Text, '');
       Config.SetDeleteValue('ZoomLevel', seZoom.Value, 2);
@@ -820,6 +850,8 @@ begin
       Config.SetDeleteValue('FillColor', edFillColor.Text, DEF_FILL_COLOR);
       Config.SetDeleteValue('LineColor', edLineColor.Text, DEF_LINE_COLOR);
       Config.SetDeleteValue('BackgroundColor', edBackgroundColor.Text, DEF_FILL_COLOR);
+      Config.SetDeleteValue('PreFillOceans', cbPreFillOceans.Checked, False);
+      Config.SetDeleteValue('OceanColor', edOceanColor.Text, DEF_OCEAN_COLOR);
       Config.SetDeleteValue('TilesOpacity', seOpacity.Value, 255);
       Config.SetDeleteExtendedValue('LineWidth', seLineWidth.Value, 2);
       Config.SetDeleteExtendedValue('PointRadius', sePointRadius.Value, 3);
@@ -845,8 +877,7 @@ begin
     Config := TXMLConfig.Create(CONFIGURATION_FILE);
     try
       Version := Config.GetValue('Version', 1);
-
-      projDefaultPath:=Config.GetValue('ProjDefaultPath', 'C:\OSGeo4W\share\proj');
+      projDefaultPath := Config.GetValue('ProjDefaultPath', 'C:\OSGeo4W\share\proj');
       FileNameEdit1.Text := Config.GetValue('DefaultFile', '');
       edFilter.Text := Config.GetValue('Filter', '');
       seZoom.Value := Config.GetValue('ZoomLevel', 2);
@@ -858,13 +889,17 @@ begin
       edLineColor.Text := Config.GetValue('LineColor', DEF_LINE_COLOR);
       btnLineColor.ButtonColor := HTmlColorToTColor(Spaces2Zeros(edLineColor.Text));
       edBackgroundColor.Text := Config.GetValue('BackgroundColor', DEF_BACKGROUND_COLOR);
+      btnBackgroundColor.ButtonColor :=
+        HTmlColorToTColor(Spaces2Zeros(edBackgroundColor.Text));
+      cbPreFillOceans.Checked := Config.GetValue('PreFillOceans', True);
+      edOceanColor.Text := Config.GetValue('OceanColor', DEF_OCEAN_COLOR);
       btnBackgroundColor.ButtonColor := HTmlColorToTColor(Spaces2Zeros(edBackgroundColor.Text));
       seOpacity.Value := Config.GetValue('TilesOpacity', 255);
       seLineWidth.Value := Config.GetExtendedValue('LineWidth', 2);
       sePointRadius.Value := Config.GetExtendedValue('PointRadius', 3);
       seBitmapWidth.Value := Config.GetValue('BitmapWidth', 1220);
       seBitmapHeight.Value := Config.GetValue('BitmapHeight', 550);
-      cbGrid.ItemIndex := Config.GetValue('GridItemIndex',0);
+      cbGrid.ItemIndex := Config.GetValue('GridItemIndex', 0);
     finally
       Config.Free;
     end;

@@ -1,7 +1,7 @@
 object Form1: TForm1
-  Left = 313
+  Left = 230
   Height = 610
-  Top = 214
+  Top = 128
   Width = 1242
   Caption = 'Geopackage Viewer'
   ClientHeight = 610
@@ -38,7 +38,6 @@ object Form1: TForm1
     Top = 3
     Width = 168
     Caption = '(C) Domingo Galmés 2021 v.0.1 '
-    ParentColor = False
   end
   object lbRepoUrl: TLabel
     Left = 824
@@ -48,7 +47,6 @@ object Form1: TForm1
     Caption = 'https://www.github.com/DomingoGP/geopackageViewer'
     Font.Color = clBlue
     Font.Style = [fsUnderline]
-    ParentColor = False
     ParentFont = False
     OnClick = lbRepoUrlClick
   end
@@ -72,7 +70,6 @@ object Form1: TForm1
     Top = 21
     Width = 84
     Caption = 'Geopackage file'
-    ParentColor = False
   end
   object btnSaveSettings: TButton
     Left = 712
@@ -174,7 +171,8 @@ object Form1: TForm1
         Columns = <>
         DataSource = DataSourceSlave
         FixedCols = 0
-        Options = [dgTitles, dgColumnResize, dgColumnMove, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit, dgDisableDelete, dgDisableInsert, dgCellHints, dgTruncCellHints, dgCellEllipsis, dgDisplayMemoText]
+        Options = [dgTitles, dgColumnResize, dgColumnMove, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit, dgAnyButtonCanSelect, dgDisableDelete, dgDisableInsert, dgCellHints, dgTruncCellHints, dgCellEllipsis, dgDisplayMemoText]
+        PopupMenu = PopupMenu1
         ReadOnly = True
         ShowHint = True
         TabOrder = 1
@@ -194,7 +192,6 @@ object Form1: TForm1
         Top = 197
         Width = 105
         Caption = 'Filter (where clause)'
-        ParentColor = False
       end
       object edFilter: TEdit
         Left = 128
@@ -238,7 +235,6 @@ object Form1: TForm1
         Top = 225
         Width = 53
         Caption = 'Field label'
-        ParentColor = False
       end
       object btnDraw: TButton
         Left = 1136
@@ -255,7 +251,6 @@ object Form1: TForm1
         Top = 202
         Width = 32
         Caption = 'Zoom'
-        ParentColor = False
       end
       object seLat: TFloatSpinEdit
         Left = 906
@@ -291,7 +286,6 @@ object Form1: TForm1
         Top = 202
         Width = 19
         Caption = 'Lat.'
-        ParentColor = False
       end
       object Label5: TLabel
         Left = 971
@@ -299,7 +293,6 @@ object Form1: TForm1
         Top = 202
         Width = 23
         Caption = 'Lon.'
-        ParentColor = False
       end
       object seZoom: TSpinEdit
         Left = 851
@@ -334,9 +327,9 @@ object Form1: TForm1
         Left = 639
         Height = 253
         Top = 243
-        Width = 185
+        Width = 334
         ClientHeight = 253
-        ClientWidth = 185
+        ClientWidth = 334
         Color = clBtnFace
         ParentColor = False
         TabOrder = 12
@@ -346,7 +339,6 @@ object Form1: TForm1
           Top = 146
           Width = 61
           Caption = 'Font height'
-          ParentColor = False
         end
         object seFontHeight: TSpinEdit
           Left = 87
@@ -372,7 +364,6 @@ object Form1: TForm1
           Top = 64
           Width = 57
           Caption = 'Line Width'
-          ParentColor = False
         end
         object Label10: TLabel
           Left = 7
@@ -380,7 +371,6 @@ object Form1: TForm1
           Top = 38
           Width = 63
           Caption = 'Point radius'
-          ParentColor = False
         end
         object btnFillColor: TColorButton
           Left = 7
@@ -410,7 +400,6 @@ object Form1: TForm1
           Top = 170
           Width = 68
           Caption = 'Tiles Opacity'
-          ParentColor = False
         end
         object seLineWidth: TFloatSpinEdit
           Left = 87
@@ -510,7 +499,6 @@ object Form1: TForm1
           Top = 229
           Width = 53
           Caption = 'Show grid'
-          ParentColor = False
         end
         object cbGrid: TComboBox
           Left = 72
@@ -532,6 +520,37 @@ object Form1: TForm1
           TabOrder = 10
           Text = 'none'
         end
+        object cbPreFillOceans: TCheckBox
+          Left = 184
+          Height = 19
+          Top = 96
+          Width = 93
+          Caption = 'Pre fill oceans'
+          TabOrder = 11
+        end
+        object btnOceanColor: TColorButton
+          Left = 184
+          Height = 25
+          Top = 120
+          Width = 69
+          BorderWidth = 2
+          ButtonColorSize = 16
+          ButtonColor = 16441780
+          Caption = 'Oceans'
+          OnColorChanged = btnOceanColorColorChanged
+        end
+        object edOceanColor: TMaskEdit
+          Left = 258
+          Height = 23
+          Top = 120
+          Width = 70
+          MaxLength = 9
+          TabOrder = 12
+          OnEditingDone = edOceanColorEditingDone
+          EditMask = '>\#HHHHHHhh;1;_'
+          Text = '#        '
+          SpaceChar = '_'
+        end
       end
       object lbStyle: TLabel
         Left = 640
@@ -541,7 +560,6 @@ object Form1: TForm1
         AutoSize = False
         Caption = '   +/-  Graphic Style'
         Color = clBtnFace
-        ParentColor = False
         Transparent = False
         OnClick = lbStyleClick
       end
@@ -564,10 +582,10 @@ object Form1: TForm1
         TabOrder = 14
       end
       object cbProjection: TComboBox
-        Left = 352
+        Left = 547
         Height = 23
-        Top = 170
-        Width = 856
+        Top = 171
+        Width = 664
         ItemHeight = 15
         ItemIndex = 0
         Items.Strings = (
@@ -599,17 +617,18 @@ object Form1: TForm1
           '+proj=cea +lon_0=0 +lat_ts=45 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'
           '+proj=loxim'
           '+proj=sterea +lat_0=-90'
+          '{ECKERT IV} +proj=eck4'
+          '{WAGNER IV} +proj=wag4'
         )
         TabOrder = 15
         Text = '{Google maps} EPSG:3857'
       end
       object lbProjection: TLabel
-        Left = 288
+        Left = 472
         Height = 15
         Top = 174
         Width = 54
         Caption = 'Projection'
-        ParentColor = False
       end
       object cbClipLat: TCheckBox
         Left = 552
@@ -632,12 +651,23 @@ object Form1: TForm1
         TabOrder = 17
       end
       object cbOnlyDrawPoints: TCheckBox
-        Left = 49
+        Left = 16
         Height = 19
         Top = 174
         Width = 110
         Caption = 'Only draw points'
         TabOrder = 18
+      end
+      object lbRepoUrl1: TLabel
+        Left = 192
+        Height = 15
+        Top = 174
+        Width = 268
+        Caption = 'https://proj.org/operations/projections/index.html'
+        Font.Color = clBlue
+        Font.Style = [fsUnderline]
+        ParentFont = False
+        OnClick = lbRepoUrlClick
       end
     end
     object tbsGraphic: TTabSheet
@@ -660,6 +690,7 @@ object Form1: TForm1
         VertScrollBar.Tracking = True
         Anchors = [akTop, akLeft, akRight, akBottom]
         AutoScroll = False
+        PopupMenu = PopupMenuGraphic
         TabOrder = 0
         OnMouseLeave = PaintBox1MouseLeave
         OnMouseMove = PaintBox1MouseMove
@@ -676,7 +707,6 @@ object Form1: TForm1
         Top = 20
         Width = 34
         Caption = 'Tables'
-        ParentColor = False
       end
       object cbTables: TComboBox
         Left = 84
@@ -694,7 +724,6 @@ object Form1: TForm1
         Top = 85
         Width = 32
         Caption = 'Query'
-        ParentColor = False
       end
       object edQuery: TEdit
         Left = 79
@@ -738,7 +767,6 @@ object Form1: TForm1
     Caption = 'Uses BGRABitmap library.'
     Font.Color = clBlue
     Font.Style = [fsUnderline]
-    ParentColor = False
     ParentFont = False
     OnClick = lbBgraBitmapClick
   end
@@ -750,7 +778,6 @@ object Form1: TForm1
     Caption = 'Uses Proj library.'
     Font.Color = clBlue
     Font.Style = [fsUnderline]
-    ParentColor = False
     ParentFont = False
     OnClick = lbProjLibClick
   end
@@ -762,7 +789,6 @@ object Form1: TForm1
     Caption = 'Uses SQLite'
     Font.Color = clBlue
     Font.Style = [fsUnderline]
-    ParentColor = False
     ParentFont = False
     OnClick = lbSQLiteClick
   end
@@ -878,5 +904,25 @@ object Form1: TForm1
     Params = <>
     Left = 952
     Top = 352
+  end
+  object PopupMenu1: TPopupMenu
+    Left = 95
+    Top = 472
+    object miDraw: TMenuItem
+      Caption = 'Draw'
+      OnClick = miDrawClick
+    end
+    object miCopyToGeoJson: TMenuItem
+      Caption = 'GeoJson to clipboard.'
+      OnClick = miCopyToGeoJsonClick
+    end
+  end
+  object PopupMenuGraphic: TPopupMenu
+    Left = 474
+    Top = 446
+    object miSetOrigin: TMenuItem
+      Caption = 'Set Point as Origin'
+      OnClick = miSetOriginClick
+    end
   end
 end

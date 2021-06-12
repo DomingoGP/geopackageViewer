@@ -30,32 +30,24 @@ type
   TGeoPackageDrawerProj = class(TGeoPackageDrawer)
   protected
     P: PPJ;
-    FGridTileSize: integer;
-    //<size of rectangles used for reprject. Smaller is more precise but slower.
   public
     Scale:double;
     Origin_Shift:double;
-    MinLat,MaxLat:double;
-    MinLon,MaxLon:double;
     constructor Create(ABitmap: TBGRABitmap; AZoomLevel: integer;
       aLatLeftTop: double; aLonLeftTop: double;aProjectTo:string='EPSG:3857');
-    function CoordToPixelXY(latitude, longitude: double; out pixelX: integer;
-      out pixelY: integer): boolean; override;
-    procedure PixelXYToCoord(pixelX, pixelY: integer; out latitude: double;
-      out longitude: double); override;
+    function CoordToPixelXY(latitude, longitude: double; var pixelX: integer;
+      var pixelY: integer): boolean; override;
+    function PixelXYToCoord(pixelX, pixelY: integer;
+      var latitude: double; var longitude: double):boolean;override;
     procedure SetupProjection; virtual; overload;
     procedure SetupProjection(const aTo: string); virtual; overload;
     destructor Destroy; override;
     procedure DrawTiles(aGeoPackage: TGeoPackage; const aTableName: string;
       aOpacity: byte = 255); override;
-    property GridTileSize: integer read FGridTileSize write FGridTileSize;
     function CoordToMeters(latitude, longitude: double;
       out metersX: double; out metersY: double): boolean;
     procedure SetScale;
-    function IsProjValid:boolean;
-    procedure SetLatBounds(aMinLat:double;aMaxLat:double);
-    procedure SetLonBounds(aMinLon:double;aMaxLon:double);
-
+    function IsProjValid:boolean;override;
   end;
 
 
@@ -76,8 +68,7 @@ begin
   inherited Create(ABitmap, AZoomLevel, aLatLeftTop, aLonLeftTop);
   FGridTileSize := 16;
   SetLatBounds(-90,90);
-  MinLon := -180;
-  MaxLon := 180;
+  SetLonBounds(-180,180);
   SetupProjection(aProjectTo);
 end;
 
@@ -105,46 +96,9 @@ end;
 
 procedure TGeoPackageDrawerProj.SetScale;
 var
-  P0X,P1X:double;
-  mx,my:double;
   wLenMeters:double;
-
-  procedure Adjust;
-  begin
-    if IsInfinite(mx) or IsNan(mx) then
-      Exit;
-    if mx<P0X then
-      P0X:=mx;
-    if mx>P1X then
-      P1X:=mx;
-  end;
-
 begin
-  // find bounds.
-  P0X:=0;
-  P1X:=0;
-  CoordToMeters(0,0,mx,my);
-  if (IsInfinite(mx)=false) and (IsNan(mx)=false) then
-  begin
-    P0X:=mx;
-    P1X:=mx;
-  end;
-  CoordToMeters(0,-180,mx,my);
-  Adjust;
-  CoordToMeters(0,180,mx,my);
-  Adjust;
-  CoordToMeters(90,-180,mx,my);
-  Adjust;
-  CoordToMeters(90,180,mx,my);
-  Adjust;
-  CoordToMeters(-90,-180,mx,my);
-  Adjust;
-  CoordToMeters(-90,180,mx,my);
-  Adjust;
-  wLenMeters:=P1X-P0X;
-  // hack.
-  if wLenMeters < PI * EARTH_EQUATORIAL_RADIUS then
-   wLenMeters:= 2 * PI * EARTH_EQUATORIAL_RADIUS;
+  wLenMeters:= 2 * PI * EARTH_EQUATORIAL_RADIUS;
   Scale:=MapSizeInPixels(FZoomLevel) / wLenMeters;
   Origin_Shift:= wLenMeters * 0.5 * Scale;
 end;
@@ -154,41 +108,20 @@ begin
   Result:= P<>nil;
 end;
 
-procedure TGeoPackageDrawerProj.SetLatBounds(aMinLat: double; aMaxLat: double);
-begin
-  MinLat:=aMinLat;
-  MaxLat:=aMaxLat;
-end;
-
-procedure TGeoPackageDrawerProj.SetLonBounds(aMinLon: double; aMaxLon: double);
-begin
-  MinLon:=aMinLon;
-  MaxLon:=aMaxLon;
-end;
-
 function TGeoPackageDrawerProj.CoordToPixelXY(latitude, longitude: double;
-  out pixelX: integer; out pixelY: integer): boolean;
+  var pixelX: integer; var pixelY: integer): boolean;
 var
   c_in, c_out: PJ_COORD;
-  temp:double;
 
   function CheckPoint(aV:double;var aOut:integer):boolean;
   begin
     result:=true;
-    //if IsNan(aV) then
-    //  Exit(false);
-    //if aV=NegInfinity then
-    //  aV:=-MaxInt
-    //else if aV=Infinity then
-    //  aV:=MaxInt
     if IsInfinite(aV) or IsNan(aV) then
       Exit(false)
     else if aV>MaxInt then
       Exit(false)
-//      aV:=MaxInt
     else if aV<-MaxInt then
       Exit(false);
-//      aV:=-MaxInt;
     aOut := Trunc(aV);
   end;
 begin
@@ -204,67 +137,46 @@ begin
     c_out := proj_trans(P, PJ_FWD, c_in);
     if IsInfinite(c_out.xy.x) or IsInfinite(c_out.xy.y) or IsNan(c_out.xy.x) or IsNan(c_out.xy.y) then
       Exit(False);
-    temp:=Origin_Shift + c_out.xy.x * Scale;
-
     if CheckPoint(Origin_Shift + c_out.xy.x * Scale, PixelX)=false then
       Exit(false);
     if CheckPoint(Origin_Shift + c_out.xy.y * Scale, PixelY)=false then
       Exit(false);
-
-{
-    if IsInfinite(temp) or IsNan(temp) then
-      Exit(False);
-    if temp>MaxInt then
-      temp:=MaxInt;
-    if temp<-MaxInt then
-      temp:=-MaxInt;
-    PixelX := Trunc(temp);
-    temp:=Origin_Shift + c_out.xy.y * Scale;
-    if IsInfinite(temp) or IsNan(temp) then
-      Exit(False);
-    if temp>MaxInt then
-      temp:=MaxInt;
-    if temp<-MaxInt then
-      temp:=-MaxInt;
-    PixelY := Trunc(temp);
-}
   end;
 end;
 
-procedure TGeoPackageDrawerProj.PixelXYToCoord(pixelX, pixelY: integer;
-  out latitude: double; out longitude: double);
+function TGeoPackageDrawerProj.PixelXYToCoord(pixelX, pixelY: integer;
+  var latitude: double; var longitude: double):boolean;
 var
   c_in, c_out: PJ_COORD;
   mx, my: double;
 begin
+  result:=false;
+  latitude:=infinity;
+  longitude:=infinity;
   if P = nil then
-    inherited
-  else
   begin
-    //Pixels To Meters
-    try
-//      latitude:=infinity;
-//      longitude:=infinity;
-      if Scale<>0 then
-      begin
-        mx:=(PixelX-Origin_Shift) / Scale;
-        my:=(pixelY-Origin_Shift) / Scale;
-        if IsNan(mx) or IsInfinite(mx) then exit;
-        if IsNan(my) or IsInfinite(my) then exit;
-        c_in.xy.x := mx;
-        c_in.xy.y := my;
-        c_in.lpzt.z := 0.0;
-        c_in.lpzt.t := HUGE_VAL;
-        c_out := proj_trans(P, PJ_INV, c_in);
-        if (not IsNan(c_out.lpzt.phi)) and (not IsInfinite(c_out.lpzt.phi)) then
-          latitude := -c_out.lpzt.phi;
-        if (not IsNan(c_out.lpzt.lam)) and (not IsInfinite(c_out.lpzt.lam)) then
-          longitude := c_out.lpzt.lam;
-      end;
-    except
-      latitude:=infinity;
-      longitude:=infinity;
+    result:=inherited PixelXYToCoord(pixelX, pixelY, latitude, longitude);
+    exit;
+  end;
+  try
+    if not IsZero(Scale) then
+    begin
+      mx:=(PixelX-Origin_Shift) / Scale;
+      my:=(pixelY-Origin_Shift) / Scale;
+      if IsNan(mx) or IsInfinite(mx) then exit;
+      if IsNan(my) or IsInfinite(my) then exit;
+      c_in.xy.x := mx;
+      c_in.xy.y := my;
+      c_in.lpzt.z := 0.0;
+      c_in.lpzt.t := HUGE_VAL;
+      c_out := proj_trans(P, PJ_INV, c_in);
+      if (not IsNan(c_out.lpzt.phi)) and (not IsInfinite(c_out.lpzt.phi)) then
+        latitude := -c_out.lpzt.phi;
+      if (not IsNan(c_out.lpzt.lam)) and (not IsInfinite(c_out.lpzt.lam)) then
+        longitude := c_out.lpzt.lam;
+      result:=true;
     end;
+  except
   end;
 end;
 
@@ -306,6 +218,7 @@ end;
 procedure TGeoPackageDrawerProj.SetupProjection(const aTo: string);
 var
   P_for_GIS: PPJ;
+  wPX,wPY:integer;
 begin
   P_for_GIS := nil;
   if P <> nil then
@@ -317,22 +230,24 @@ begin
   if P <> nil then
     proj_destroy(P);
   P := P_for_GIS;
-
+  SetScale;
+  inherited CoordToPixelXY(FLatOrigin, FLonOrigin, FXOrigin, FYOrigin);
+  inherited PixelXYToCoord(FXOrigin + FBitmap.Width, FYOrigin + FBitmap.Height, FLatEnd, FLonEnd);
+  FFalseMeridian:=ParseValueProj('lon_0',aTo);
+  FFalseEquator:=ParseValueProj('lat_0',aTo);
+  FClipPoligons:=true;
   if Pos('ortho',LowerCase(aTo))>0 then
   begin
-    FalseMeridian:=0;
-    FalseEquator:=0;
-    FClipPoligons:=false;
-  end
-  else
-  begin
-    FalseMeridian:=ParseValueProj('lon_0',aTo);
-    FalseEquator:=ParseValueProj('lat_0',aTo);
-    FClipPoligons:=true;
+    CoordToPixelXY(-FFalseEquator,FFalseMeridian,wPX,wPY);
+    PixelXYToPixelBitmapNoClip(wPX, wPY, FCenter);
+    FRadio:=Scale * EARTH_EQUATORIAL_RADIUS;
+    FFalseMeridian:=0;
+    FFalseEquator:=0;
+    FClipPoligons:=true; //false;
+    //all globe.
+    FLatEnd:=-90;
+    FLonEnd:=180;
   end;
-  CoordToPixelXY(FLatOrigin, FLonOrigin, FXOrigin, FYOrigin);
-  PixelXYToCoord(FXOrigin + FBitmap.Width, FYOrigin + FBitmap.Height, FLatEnd, FLonEnd);
-  SetScale;
 end;
 
 destructor TGeoPackageDrawerProj.Destroy;
@@ -376,7 +291,7 @@ var
   wRow, wCol: integer;
   wNumRows, wNumCols: integer;
   wTemp: integer;
-  wPixelXSize, wPixelYSize: double;
+  //wPixelXSize, wPixelYSize: double;
   wGMXOrigin, wGMYOrigin: integer;
   wLat00, wLat01, wLat10, wLat11: double;
   wLon00, wLon01, wLon10, wLon11: double;
@@ -397,6 +312,15 @@ var
     result:=aLon;
     if result > (180 - wA) then
       result:=180;
+  end;
+
+  function AdjustLatTo90(aLat:double):double;
+  begin
+    result:=aLat;
+    if aLat>=85.051 {MaxLatitude} then
+      result:=90;
+    if aLat<=-85.051 {MinLatitude} then
+      result:=-90;
   end;
 
 begin
@@ -433,8 +357,8 @@ begin
     wTileHeight := wTable.FieldAsInteger(3);
     wMatrixW:=wTable.FieldAsInteger(0);
     wMatrixH:=wTable.FieldAsInteger(1);
-    wPixelXSize := wTable.FieldAsDouble(4);
-    wPixelYSize := wTable.FieldAsDouble(5);
+    //wPixelXSize := wTable.FieldAsDouble(4);
+    //wPixelYSize := wTable.FieldAsDouble(5);
   finally
     wTable.Free;
   end;
@@ -516,6 +440,14 @@ begin
         wLon10:=AdjustTo180(wLon10);
         wLon11:=AdjustTo180(wLon11);
 
+        if FRadio>0 then     // ortho
+        begin
+          wLat00:=AdjustLatTo90(wLat00);
+          wLat01:=AdjustLatTo90(wLat01);
+          wLat10:=AdjustLatTo90(wLat10);
+          wLat11:=AdjustLatTo90(wLat11);
+        end;
+
         //los reproyectamos con la nueva proyeccion
         wOk := True;
         wOk := wOk and CoordToPixelXY(wLat00, wLon00, wXP00, wYP00);
@@ -546,6 +478,5 @@ begin
     wTexture.Free;
   end;
 end;
-
 
 end.

@@ -24,6 +24,13 @@ uses
   Classes, contnrs, SysUtils, BGRABitmap, BGRABitmapTypes, geopackagewkb, Graphics
   , SQLiteWrap, polylabelu;
 
+const
+  MinLatitude = -85.05112878;
+  MaxLatitude = 85.05112878;
+  MinLongitude = -180;
+  MaxLongitude = 180;
+
+
 type
   { TPointList }
 
@@ -98,6 +105,8 @@ type
     FFalseMeridian: double;
     FFalseEquator:double;
     FClipPoligons:boolean;
+    //<size of rectangles used for reprject. Smaller is more precise but slower.
+    FGridTileSize: integer;
     procedure ReadPoint(const aGH: wkbGeometryHeader);
     procedure ReadMultiPoint(const aGH: wkbGeometryHeader);
     procedure ReadMultiPoligono(const aGH: wkbGeometryHeader);
@@ -110,6 +119,10 @@ type
     function GetMaxEnvelope: wkPointZM;
     procedure DrawPoints(aPoints:array of TPointF; aColor:TBGRAPixel);
   public
+    FRadio:double;
+    FCenter:TPoint;
+    MinLat,MaxLat:double;
+    MinLon,MaxLon:double;
     //HIGH LEVEL procedures.
     constructor Create(ABitmap: TBGRABitmap; AZoomLevel: integer;
       aLatLeftTop: double; aLonLeftTop: double); overload;
@@ -121,6 +134,9 @@ type
     procedure DrawLabels; overload;
     procedure DrawGrid(aColor: TBGRAPixel; aInterval: TDrawInterval = di15;
       aLineWidth: single = 1);
+    //drawing blue background for oceans
+    procedure DrawFilledGrid(aColor: TBGRAPixel;aFillColor:TBGRAPixel;
+      aInterval: TDrawInterval = di15; aLineWidth: single = 1);
     //LOW LEVEL procedures.
     procedure Draw(APtrWellKnowBinary: pbyte; ASize: integer; aClip: boolean = True);
     //AddLabel??? should be called after Draw.
@@ -135,11 +151,13 @@ type
     procedure ClearLabels;
     procedure DrawLabel(aLabel: TGPLabel);
     procedure DrawLabels(aFromPriority: integer; aToPriority: integer); overload;
-    function CoordToPixelXY(latitude, longitude: double; out pixelX: integer;
-      out pixelY: integer): boolean; virtual;
-    procedure PixelXYToCoord(pixelX, pixelY: integer; out latitude: double;
-      out longitude: double); virtual;
-
+    function CoordToPixelXY(latitude, longitude: double; var pixelX: integer;
+      var pixelY: integer): boolean; virtual;
+    function PixelXYToCoord(pixelX, pixelY: integer;
+      var latitude: double; var longitude: double):boolean;virtual;
+    procedure SetLatBounds(aMinLat:double;aMaxLat:double);
+    procedure SetLonBounds(aMinLon:double;aMaxLon:double);
+    function IsProjValid:boolean;virtual;
     property FillColor: TBGRAPixel read FFillColor write FFillColor;
     property BorderColor: TBGRAPixel read FBorderColor write FBorderColor;
     property MinEnvelope: wkPointZM read GetMinEnvelope;
@@ -162,6 +180,7 @@ type
     property FalseMeridian: double read FFalseMeridian write FFalseMeridian;
     property FalseEquator:double read FFalseEquator write FFalseEquator;
     property OnlyDrawPoints:boolean read FOnlyDrawPoints write FOnlyDrawPoints;
+    property GridTileSize: integer read FGridTileSize write FGridTileSize;
   end;
 
 
@@ -177,11 +196,6 @@ implementation
 uses
   Math;
 
-const
-  MinLatitude = -85.05112878;
-  MaxLatitude = 85.05112878;
-  MinLongitude = -180;
-  MaxLongitude = 180;
 
 function Clip(n, MinValue, MaxValue: double): double;
 begin
@@ -261,8 +275,7 @@ end;
 
 function TGeoPackage.Open(const aFileName: string): boolean;
 begin
-  if FDatabase <> nil then
-    FDataBase.Free;
+  Close;
   if not FileExists(aFileName) then
   begin
     //ShowMessage('File ' + aFileName + ' not exists');
@@ -390,7 +403,6 @@ begin
   FLabelsList.Free;
   inherited;
 end;
-
 
 function IsReal(const d: single): boolean; overload;
 begin
@@ -671,7 +683,7 @@ begin
   wIncDraw := 5;
   // draw meridians.
   wLon := -180;
-  while wLon <= 180 do   // 0.2 for precision errors.
+  while wLon <= 180 do
   begin
     wFrom.x := -99999;
     wLat := 90;
@@ -712,6 +724,99 @@ begin
     wLat := wLat - wInc;
   end;
 end;
+
+
+procedure TGeoPackageDrawer.DrawFilledGrid(aColor: TBGRAPixel;aFillColor:TBGRAPixel;
+  aInterval: TDrawInterval = di15; aLineWidth: single = 1);
+var
+  wPX, wPY: integer;
+  wPoint: TPoint;
+  wLat, wLon: integer;
+  wInc: integer;
+  wP0,wP1,wP2,wP3:TPointF;
+  wP0b,wP1b,wP2b,wP3b:boolean;
+  wPoints:array[0..5] of TPointF;
+  wNumPoints:integer;
+begin
+//  if not FDrawShapes then
+//    Exit;
+  if aInterval = di0 then
+    Exit;
+  wInc := integer(aInterval);
+  // draw parallels.
+  wLat := 90;
+  while wLat >= -(90-wInc) do
+  begin
+    wLon := -180;
+    wP0b:=CoordToPixelXY(wLat, wLon, wPX, wPY);
+    if wP0b then
+    begin
+      PixelXYToPixelBitmapNoClip(wPX, wPY, wPoint);
+      wP0.X:=wPoint.X;
+      wP0.Y:=wPoint.Y;
+    end;
+    wP1b:=CoordToPixelXY(wLat - wInc, wLon, wPX, wPY);
+    if wP1b then
+    begin
+      PixelXYToPixelBitmapNoClip(wPX, wPY, wPoint);
+      wP1.X:=wPoint.X;
+      wP1.Y:=wPoint.Y;
+    end;
+
+    while wLon <= (180-wInc) do
+    begin
+      wNumPoints:=0;
+      wP2b:=CoordToPixelXY(wLat, wLon+wInc, wPX, wPY);
+      if wP2b then
+      begin
+        PixelXYToPixelBitmapNoClip(wPX, wPY, wPoint);
+        wP2.X:=wPoint.X;
+        wP2.Y:=wPoint.Y;
+      end;
+      wP3b:=CoordToPixelXY(wLat-wInc, wLon + wInc, wPX, wPY);
+      if wP3b then
+      begin
+        PixelXYToPixelBitmapNoClip(wPX, wPY, wPoint);
+        wP3.X:=wPoint.X;
+        wP3.Y:=wPoint.Y;
+      end;
+      if wP0b then
+      begin
+        wPoints[wNumPoints]:=wP0;
+        inc(wNumPoints);
+      end;
+      if wP2b then
+      begin
+        wPoints[wNumPoints]:=wP2;
+        inc(wNumPoints);
+      end;
+      if wP3b then
+      begin
+        wPoints[wNumPoints]:=wP3;
+        inc(wNumPoints);
+      end;
+      if wP1b then
+      begin
+        wPoints[wNumPoints]:=wP1;
+        inc(wNumPoints);
+      end;
+      if wNumPoints>=2 then
+      begin
+        wPoints[wNumPoints]:=wPoints[0]; // close polygon.
+        inc(wNumPoints);
+       FBitmap.DrawPolygonAntialias(slice(wPoints, wNumPoints),
+        aColor, aLineWidth, {BGRA(0,255,0)} aFillColor);
+      end;
+      wP0b:=wP2b;
+      wP1b:=wP3b;
+      wP0:=wP2;
+      wP1:=wP3;
+      wLon := wLon + wInc;
+    end;
+    wLat := wLat - wInc;
+  end;
+end;
+
 
 procedure TGeoPackageDrawer.ReadPoint(const aGH: wkbGeometryHeader);
 var
@@ -771,6 +876,23 @@ begin
     wGH := wkbReader.ReadGeometryHeader;
     ReadLineString(wGH);
   end;
+end;
+
+procedure TGeoPackageDrawer.SetLatBounds(aMinLat: double; aMaxLat: double);
+begin
+  MinLat:=aMinLat;
+  MaxLat:=aMaxLat;
+end;
+
+procedure TGeoPackageDrawer.SetLonBounds(aMinLon: double; aMaxLon: double);
+begin
+  MinLon:=aMinLon;
+  MaxLon:=aMaxLon;
+end;
+
+function TGeoPackageDrawer.IsProjValid: boolean;
+begin
+  Result:=true;
 end;
 
 procedure TGeoPackageDrawer.PixelXYToPixelBitmapNoClip(pixelX, pixelY: integer;
@@ -1002,7 +1124,6 @@ begin
   end;
 end;
 
-
 procedure TGeoPackageDrawer.DrawFeatures(aGeoPackage: TGeoPackage;
   const aTableName: string; const aFieldLabel: string; const aWhereFilter: string);
 var
@@ -1041,15 +1162,16 @@ begin
 end;
 
 function TGeoPackageDrawer.CoordToPixelXY(latitude, longitude: double;
-  out pixelX: integer; out pixelY: integer): boolean;
+  var pixelX: integer; var pixelY: integer): boolean;
 begin
   Result := True;
   LatLongToPixelXY(latitude, longitude, FZoomLevel, pixelX, pixelY);
 end;
 
-procedure TGeoPackageDrawer.PixelXYToCoord(pixelX, pixelY: integer;
-  out latitude: double; out longitude: double);
+function TGeoPackageDrawer.PixelXYToCoord(pixelX, pixelY: integer;
+  var latitude: double; var longitude: double):boolean;
 begin
+  result:=true;
   PixelXYToLatLong(pixelX, pixelY, FZoomLevel, latitude, longitude);
 end;
 
