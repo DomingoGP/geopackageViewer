@@ -1,7 +1,7 @@
 object Form1: TForm1
-  Left = 230
+  Left = 377
   Height = 610
-  Top = 128
+  Top = 131
   Width = 1242
   Caption = 'Geopackage Viewer'
   ClientHeight = 610
@@ -158,6 +158,7 @@ object Form1: TForm1
         DataSource = DataSource1
         FixedCols = 0
         Options = [dgTitles, dgColumnResize, dgColumnMove, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit, dgDisableDelete, dgDisableInsert, dgDisplayMemoText]
+        Options2 = [goScrollToLastCol]
         ReadOnly = True
         TabOrder = 0
       end
@@ -171,7 +172,8 @@ object Form1: TForm1
         Columns = <>
         DataSource = DataSourceSlave
         FixedCols = 0
-        Options = [dgTitles, dgColumnResize, dgColumnMove, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit, dgAnyButtonCanSelect, dgDisableDelete, dgDisableInsert, dgCellHints, dgTruncCellHints, dgCellEllipsis, dgDisplayMemoText]
+        Options = [dgTitles, dgColumnResize, dgColumnMove, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit, dgAutoSizeColumns, dgAnyButtonCanSelect, dgDisableDelete, dgDisableInsert, dgCellHints, dgCellEllipsis, dgDisplayMemoText]
+        Options2 = [goScrollToLastRow]
         PopupMenu = PopupMenu1
         ReadOnly = True
         ShowHint = True

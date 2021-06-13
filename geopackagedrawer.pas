@@ -123,6 +123,7 @@ type
     FCenter:TPoint;
     MinLat,MaxLat:double;
     MinLon,MaxLon:double;
+    ErrorString:string;
     //HIGH LEVEL procedures.
     constructor Create(ABitmap: TBGRABitmap; AZoomLevel: integer;
       aLatLeftTop: double; aLonLeftTop: double); overload;
@@ -1020,7 +1021,7 @@ begin
   //FBitmap.FontHeight:=-ALabel.FontHeight;
   FBitmap.FontFullHeight := ALabel.FontHeight;
   //FBitmap.FontStyle:=[];
-  FBitmap.TextOut(aLabel.X, aLabel.Y, aLabel.Caption, aLabel.FontColor, taCenter, True);
+  FBitmap.TextOut(aLabel.X, aLabel.Y - ALabel.FontHeight div 2, aLabel.Caption, aLabel.FontColor, taCenter, True);
 end;
 
 procedure TGeoPackageDrawer.DrawLabels(aFromPriority: integer; aToPriority: integer);

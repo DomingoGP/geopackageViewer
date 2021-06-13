@@ -250,7 +250,7 @@ end;
 procedure TForm1.SetupDrawer(aDrawer: TGeoPackageDrawer);
 begin
   if cbClipLat.Checked then
-    Drawer.SetLatBounds(-85.05112878, 85.05112878)
+    aDrawer.SetLatBounds(-85.05112878, 85.05112878)
   else
     aDrawer.SetLatBounds(-90.0, 90.0);
   aDrawer.OnlyDrawPoints := cbOnlyDrawPoints.Checked;
@@ -288,7 +288,7 @@ begin
   Drawer := aDrawer;
   if not aDrawer.IsProjValid then
   begin
-    ShowMessage('Error creating proj. Invalid string?');
+    ShowMessage('Error creating proj. Invalid string? '+ aDrawer.ErrorString );
     Exit;
   end;
   try

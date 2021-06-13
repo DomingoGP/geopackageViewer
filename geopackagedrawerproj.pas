@@ -30,8 +30,8 @@ type
   TGeoPackageDrawerProj = class(TGeoPackageDrawer)
   protected
     P: PPJ;
+    FScale:double;
   public
-    Scale:double;
     Origin_Shift:double;
     constructor Create(ABitmap: TBGRABitmap; AZoomLevel: integer;
       aLatLeftTop: double; aLonLeftTop: double;aProjectTo:string='EPSG:3857');
@@ -46,8 +46,11 @@ type
       aOpacity: byte = 255); override;
     function CoordToMeters(latitude, longitude: double;
       out metersX: double; out metersY: double): boolean;
-    procedure SetScale;
+    procedure SetScale; overload;
+    procedure SetScale(aScale:double); overload;
+
     function IsProjValid:boolean;override;
+    property Scale:double read FScale write SetScale;
   end;
 
 
@@ -99,9 +102,19 @@ var
   wLenMeters:double;
 begin
   wLenMeters:= 2 * PI * EARTH_EQUATORIAL_RADIUS;
-  Scale:=MapSizeInPixels(FZoomLevel) / wLenMeters;
-  Origin_Shift:= wLenMeters * 0.5 * Scale;
+  FScale:=MapSizeInPixels(FZoomLevel) / wLenMeters;
+  Origin_Shift:= wLenMeters * 0.5 * FScale;
 end;
+
+procedure TGeoPackageDrawerProj.SetScale(aScale:double);
+var
+  wLenMeters:double;
+begin
+  wLenMeters:= 2 * PI * EARTH_EQUATORIAL_RADIUS;
+  FScale:=aScale;
+  Origin_Shift:= wLenMeters * 0.5 * FScale;
+end;
+
 
 function TGeoPackageDrawerProj.IsProjValid: boolean;
 begin
@@ -225,6 +238,10 @@ begin
     proj_destroy(P);
   P := proj_create_crs_to_crs(PJ_DEFAULT_CTX, pansichar('EPSG:4326'),
     pansichar(aTo), nil);
+  if P=nil then
+  begin
+    ErrorString:=proj_errno_string(proj_errno(PJ_DEFAULT_CTX));
+  end;
   if P<>nil then
     P_for_GIS := proj_normalize_for_visualization(PJ_DEFAULT_CTX, P);
   if P <> nil then

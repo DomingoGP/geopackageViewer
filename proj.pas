@@ -181,6 +181,8 @@ uses
       //last precompiled dll available from: https://trac.osgeo.org/osgeo4w/
       {$IF Defined(MSWINDOWS)}
         External_Dll ='proj_6_3.dll';
+        //External_Dll ='proj_8_1.dll';
+
       {$ELSEIF Defined(DARWIN)}
         External_Dll ='proj_6_3.dylib';
         {$linklib proj}

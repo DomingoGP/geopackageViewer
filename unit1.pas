@@ -143,15 +143,23 @@ begin
   wDrawer.Free;
 end;
 
+{
+Data used in this test downloaded from.
+https://biogeo.ucdavis.edu/data/gadm3.6/gpkg/gadm36_ESP_gpkg.zip
+}
+
 procedure TForm1.btnHighLevelClick(Sender: TObject);
 var
   wGeoPackage: TGeoPackage;
   wDrawer: TGeoPackageDrawer;
+  //BitmapMapa: TBGRABitmap;
 begin
+  //BitmapMapa:=TBGRABitmap.Create(1000,1000);
   BitmapMapa.Fill(clWhite);
   wDrawer := nil;
   wGeoPackage := nil;
   try
+    //wGeoPackage := TGeoPackage.Create('gadm36_ESP.gpkg');
     wGeoPackage := TGeoPackage.Create(edGeoPackage.Text);
     wDrawer := TGeoPackageDrawer.Create(BitmapMapa, 6, 43.80, -10.00);
     wDrawer.DrawFeatures(wGeoPackage, 'gadm36_ESP_1', '', '');  // draw all records in the table.
@@ -162,6 +170,7 @@ begin
   finally
     wGeoPackage.Free;
     wDrawer.Free;
+	//BitmapMapa.Free;
   end;
 end;
 
