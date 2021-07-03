@@ -719,7 +719,7 @@ end;
 procedure TForm1.miSetOriginClick(Sender: TObject);
 var
   wLat, wLon: double;
-  X,Y:integer;
+  //X,Y:integer;
   wPoint:TPoint;
 begin
   if graphic.X0 <> -1 then

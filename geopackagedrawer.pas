@@ -32,6 +32,7 @@ const
 
 
 type
+  GeoPackageException=Exception;
   { TPointList }
 
   TDrawInterval = (di0 = 0, di5 = 5, di10 = 10, di15 = 15, di30 = 30,
@@ -58,6 +59,12 @@ type
     Y: integer;
   end;
 
+  RFeatureProperties=record
+    GeometryFieldName:string;
+    SrsId:integer;
+    SrsName:string;
+  end;
+
 
   { TGeoPackage }
 
@@ -73,6 +80,8 @@ type
     procedure GetFeatureTables(aTables: TStrings);
     procedure GetFeatureTableFields(const aTableName: string; aFields: TStrings);
     property Database: TSQLiteDatabase read FDatabase;
+    function GetFeatureProperties(const aTableName: string; out aFeatureProperties: RFeatureProperties): boolean;
+    function GetSrsName(aId: integer): string;
   end;
 
   { TGeoPackageDrawer }
@@ -321,6 +330,50 @@ begin
   end;
 end;
 
+function TGeoPackage.GetSrsName(aId:integer):string;
+var
+  wTable: TSQLiteTable;
+begin
+  result:='';
+  if FDatabase = nil then
+    Exit;
+  Database.ParamsClear;
+  Database.AddParamInt(':id', aId);
+  wTable := Database.GetTable('select organization,organization_coordsys_id from gpkg_spatial_ref_sys where srs_id=:id');
+  try
+    if wTable.EOF = False then
+      result:=Trim(wTable.FieldAsString(0))+':'+Trim(wTable.FieldAsString(1));
+  finally
+    wTable.Free;
+  end;
+end;
+
+function TGeoPackage.GetFeatureProperties(const aTableName:string;out aFeatureProperties:RFeatureProperties):boolean;
+var
+  wTable: TSQLiteTable;
+begin
+  result:=false;
+  aFeatureProperties.GeometryFieldName:='';
+  aFeatureProperties.SrsId:=0;
+  aFeatureProperties.SrsName:='';
+  if FDatabase = nil then
+    Exit;
+
+  Database.ParamsClear;
+  Database.AddParamText(':table_name', aTableName);
+  wTable := Database.GetTable('select column_name,srs_id from gpkg_geometry_columns where table_name=:table_name');
+  try
+    if wTable.EOF = False then
+    begin
+      aFeatureProperties.GeometryFieldName := wTable.FieldAsString(0);
+      aFeatureProperties.SrsId:=wTable.FieldAsInteger(1);
+      aFeatureProperties.SrsName:=GetSrsName(aFeatureProperties.SrsId);
+      result:=true;
+    end;
+  finally
+    wTable.Free;
+  end;
+end;
 
 procedure TPointList.AddPointF(aX: integer; aY: integer); overload;
 begin
@@ -1133,11 +1186,22 @@ var
   wSize: integer;
   wQueryString: string;
   wFilter: string;
+  wFP:RFeatureProperties;
 begin
   if (aGeoPackage = nil) or (aGeoPackage.Database = nil) then
     Exit;
   FHasLabel := False;
-  wQueryString := 'select geom';
+  if aGeoPackage.GetFeatureProperties(aTableName,wFP) then
+    wQueryString := 'select ' + wFP.GeometryFieldName
+  else
+    wQueryString := 'select geom';
+  if wFP.SrsName<>'EPSG:4326' then
+  begin
+    //not implemented
+    raise GeoPackageException.Create('Not supported srs: '+wFP.SrsName);
+    Exit;
+  end;
+
   if aFieldLabel <> '' then
   begin
     wQueryString := wQueryString + ',' + aFieldLabel;
