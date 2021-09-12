@@ -114,6 +114,8 @@ type
     FFalseMeridian: double;
     FFalseEquator:double;
     FClipPoligons:boolean;
+    FProjectionFrom:string;
+    FProjectionTo:string;
     //<size of rectangles used for reprject. Smaller is more precise but slower.
     FGridTileSize: integer;
     procedure ReadPoint(const aGH: wkbGeometryHeader);
@@ -168,6 +170,10 @@ type
     procedure SetLatBounds(aMinLat:double;aMaxLat:double);
     procedure SetLonBounds(aMinLon:double;aMaxLon:double);
     function IsProjValid:boolean;virtual;
+
+    procedure SetupProjection; virtual; overload;
+    procedure SetupProjection(const aTo: string;const aFrom:string='EPSG:4326'); virtual; overload;
+
     property FillColor: TBGRAPixel read FFillColor write FFillColor;
     property BorderColor: TBGRAPixel read FBorderColor write FBorderColor;
     property MinEnvelope: wkPointZM read GetMinEnvelope;
@@ -449,6 +455,8 @@ begin
   FLonOrigin := aLonLeftTop;
   CoordToPixelXY(aLatLeftTop, aLonLeftTop, FXOrigin, FYOrigin);
   PixelXYToCoord(FXOrigin + FBitmap.Width, FYOrigin + FBitmap.Height, FLatEnd, FLonEnd);
+  FProjectionFrom:='EPSG:4326';
+  FProjectionTo:='EPSG:3857';
 end;
 
 destructor TGeoPackageDrawer.Destroy;
@@ -949,6 +957,16 @@ begin
   Result:=true;
 end;
 
+procedure TGeoPackageDrawer.SetupProjection;
+begin
+  // do nothing
+end;
+
+procedure TGeoPackageDrawer.SetupProjection(const aTo: string; const aFrom: string);
+begin
+  // do nothing
+end;
+
 procedure TGeoPackageDrawer.PixelXYToPixelBitmapNoClip(pixelX, pixelY: integer;
   out punto: TPoint);
 begin
@@ -1195,12 +1213,16 @@ begin
     wQueryString := 'select ' + wFP.GeometryFieldName
   else
     wQueryString := 'select geom';
-  if wFP.SrsName<>'EPSG:4326' then
-  begin
-    //not implemented
-    raise GeoPackageException.Create('Not supported srs: '+wFP.SrsName);
-    Exit;
-  end;
+  //partially working. Only works well with some projections
+  if wFP.SrsName<>FProjectionFrom then
+    SetupProjection(FProjectionTo,wFP.SrsName);
+
+  //if wFP.SrsName<>'EPSG:4326' then
+  //begin
+  //not implemented
+  //  raise GeoPackageException.Create('Not supported srs: '+wFP.SrsName);
+  //  Exit;
+  //end;
 
   if aFieldLabel <> '' then
   begin

@@ -124,6 +124,7 @@ type
     seZoom: TSpinEdit;
     seBitmapWidth: TSpinEdit;
     seBitmapHeight: TSpinEdit;
+    seDecimals: TSpinEdit;
     SQLQueryDB: TSQLQuery;
     StatusBar1: TStatusBar;
     SQLite3Connection1: TSQLite3Connection;
@@ -176,6 +177,7 @@ type
     BitmapMapa: TBGRABitmap;
     projDefaultPath: string;
     Drawer: TGeoPackageDrawer;
+    FeatureProperties:RFeatureProperties;
     procedure DrawMap(aDrawer: TGeoPackageDrawer);
     procedure FillLabelFieldNames;
     procedure LoadSettings;
@@ -231,9 +233,9 @@ begin
   SQLite3Connection1.DatabaseName := aFileName;
   SQLite3Connection1.Connected := True;
   SQLQuery1.Active := True;
-  SQLQuery1AfterScroll(SQLQuery1);
   tbsGeo.Visible := True;
   geopackagewkb.Open(aFileName);
+  SQLQuery1AfterScroll(SQLQuery1);
   FillTablasComboBox;
 end;
 
@@ -335,7 +337,7 @@ var
   wP: integer;
 begin
   wProjectionString := cbProjection.Text;
-  //{name of the projection} +proj ...    or +proj ...
+  //{name of the projection} epsg:XXXX  or +proj ...
   wP := Pos('}', wProjectionString);
   if wP > 0 then
   begin
@@ -498,14 +500,19 @@ var
   wFieldType: TFieldType;
   wLastField: integer;
   wOldDS: char;
+  wGeomFieldName:string;
+  wGeomNotDone:integer;
+  wTemp:string;
 begin
   if SQLQuerySlave.BOF and SQLQuerySlave.EOF then
     Exit;
-  if SQLQuerySlave.FindField('geom')=nil then
+  wGeomFieldName:=FeatureProperties.GeometryFieldName;  //'geom'
+  if SQLQuerySlave.FindField(wGeomFieldName)=nil then
     Exit;
-  if not (tblobfield(SQLQuerySlave.FieldByName('geom')).IsNull) then
+  wGeomNotDone:=1;
+  if not (tblobfield(SQLQuerySlave.FieldByName(wGeomFieldName)).IsNull) then
   begin
-    fstream := SQLQuerySlave.CreateBlobStream(SQLQuerySlave.FieldByName('geom'), bmread);
+    fstream := SQLQuerySlave.CreateBlobStream(SQLQuerySlave.FieldByName(wGeomFieldName), bmread);
     fdata := TMemoryStream.Create;
     try
       fdata.LoadFromStream(fstream);
@@ -515,7 +522,7 @@ begin
       //-----
       wGeoJson := wGeoJson + '{' + LineEnding;
       wGeoJson := wGeoJson + '"type": "Feature",' + LineEnding;
-      wToGJ.GeometryToGeoJson(fdata.Memory, fdata.Size, 2);
+      wToGJ.GeometryToGeoJson(fdata.Memory, fdata.Size, seDecimals.Value);
       wGeoJson := wGeoJson + wToGJ.FGJString;
       wGeoJson := wGeoJson + ',' + LineEnding;
       wGeoJson := wGeoJson + '"properties": {' + LineEnding;
@@ -527,7 +534,7 @@ begin
       begin
         wFieldName := LowerCase(SQLQuerySlave.Fields[wI].FieldName);
         wFieldType := SQLQuerySlave.Fields[wI].DataType;
-        if wFieldName <> 'geom' then
+        if wFieldName <> wGeomFieldName then
         begin
           wGeoJson := wGeoJson + '  "' + wFieldName + '": ';
           if wFieldType in [ftUnknown, ftBlob, ftGraphic, ftFmtMemo,
@@ -536,12 +543,20 @@ begin
             continue;
           if wFieldType in [ftSmallint, ftInteger, ftWord, ftBoolean,
             ftFloat, ftCurrency, ftBCD, ftAutoInc, ftLargeInt, ftFMTBcd] then
-            wGeoJson := wGeoJson + SQLQuerySlave.Fields[wI].AsString
+          begin
+            wTemp:=SQLQuerySlave.Fields[wI].AsString;
+            if wTemp='' then
+              wTemp:='0';
+            wGeoJson := wGeoJson + wTemp
+          end
           else
             wGeoJson := wGeoJson + '"' + EscapeString(SQLQuerySlave.Fields[wI].AsString) + '"';
-          if wI < wLastField then
-            wGeoJson := wGeoJson + ',' + LineEnding;
-        end;
+          if wI < (wLastField-wGeomNotDone) then
+            wGeoJson := wGeoJson + ',';
+          wGeoJson:=wGeoJson + LineEnding;
+        end
+        else
+          wGeomNotDone:=0;
       end;
       FormatSettings.DecimalSeparator := wOldDS;
       wGeoJson := wGeoJson + '}' + LineEnding;
@@ -682,20 +697,22 @@ procedure TForm1.miDrawClick(Sender: TObject);
 var
   fstream: TStream;
   fdata: TMemoryStream;
+  wGeomFieldName:string;
 begin
   if SQLQuerySlave.BOF and SQLQuerySlave.EOF then
     Exit;
+  wGeomFieldName:=FeatureProperties.GeometryFieldName;  //'geom'
   if SQLQuery1.FieldByName('data_type').AsString <> 'features' then
     Exit;
   if Drawer = nil then
     Exit;
   fstream := nil;
   fdata := nil;
-  if SQLQuerySlave.FindField('geom')=nil then
+  if SQLQuerySlave.FindField(wGeomFieldName)=nil then
     Exit;
-  if not (tblobfield(SQLQuerySlave.FieldByName('geom')).IsNull) then
+  if not (tblobfield(SQLQuerySlave.FieldByName(wGeomFieldName)).IsNull) then
   begin
-    fstream := SQLQuerySlave.CreateBlobStream(SQLQuerySlave.FieldByName('geom'), bmread);
+    fstream := SQLQuerySlave.CreateBlobStream(SQLQuerySlave.FieldByName(wGeomFieldName), bmread);
     fdata := TMemoryStream.Create;
     try
       fdata.LoadFromStream(fstream);
@@ -748,13 +765,17 @@ begin
 end;
 
 procedure TForm1.SQLQuery1AfterScroll(DataSet: TDataSet);
+var
+  tableName:string;
 begin
   edFilter.Text := '';
+  tableName:=SQLQuery1.FieldByName('table_name').AsString;
   SQLQuerySlave.Active := False;
   SQLQuerySlave.SQL.Clear;
-  SQLQuerySlave.SQL.Add('select * from ' + SQLQuery1.FieldByName('table_name').AsString);
+  SQLQuerySlave.SQL.Add('select * from ' + tableName);
   SQLQuerySlave.Active := True;
   FillLabelFieldNames;
+  geopackagewkb.GetFeatureProperties(tableName,FeatureProperties);
 end;
 
 procedure TForm1.FillTablasComboBox;
@@ -789,10 +810,10 @@ begin
   for wI := 0 to Pred(SQLQuerySlave.Fields.Count) do
   begin
     wFK := SQLQuerySlave.Fields[wI].DataType;
-    if wFK in [ftString, ftBoolean, ftFloat, ftCurrency, ftBCD, ftDate,
-      ftTime, ftDateTime, ftAutoInc, ftMemo, ftFmtMemo, ftFixedChar,
-      ftWideString, ftLargeint, ftTimeStamp, ftFMTBcd, ftFixedWideChar, ftWideMemo] then
-      cbLabelField.Items.Add(SQLQuerySlave.Fields[wI].FieldName);
+    if wFK in [ftString, ftBoolean, ftFloat, ftCurrency, ftBCD, ftDate, ftInteger,
+      ftSmallInt, ftLargeInt, ftTime, ftDateTime, ftAutoInc, ftMemo, ftFmtMemo,
+      ftFixedChar, ftWideString, ftTimeStamp, ftFMTBcd, ftFixedWideChar, ftWideMemo] then
+        cbLabelField.Items.Add(SQLQuerySlave.Fields[wI].FieldName);
   end;
   cbLabelField.ItemIndex := wDefault;
 end;
@@ -871,12 +892,12 @@ end;
 procedure TForm1.LoadSettings;
 var
   Config: TXMLConfig;
-  Version: integer;
+  //Version: integer;
 begin
   try
     Config := TXMLConfig.Create(CONFIGURATION_FILE);
     try
-      Version := Config.GetValue('Version', 1);
+      //Version := Config.GetValue('Version', 1);
       projDefaultPath := Config.GetValue('ProjDefaultPath', 'C:\OSGeo4W\share\proj');
       FileNameEdit1.Text := Config.GetValue('DefaultFile', '');
       edFilter.Text := Config.GetValue('Filter', '');

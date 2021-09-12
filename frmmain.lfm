@@ -8,7 +8,7 @@ object Form1: TForm1
   ClientWidth = 1242
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  LCLVersion = '2.3.0.0'
+  LCLVersion = '2.2.0.1'
   object FileNameEdit1: TFileNameEdit
     Left = 104
     Height = 23
@@ -223,7 +223,7 @@ object Form1: TForm1
         VisibleButtons = [nbFirst, nbPrior, nbNext, nbLast]
       end
       object cbLabelField: TComboBox
-        Left = 352
+        Left = 315
         Height = 23
         Top = 221
         Width = 136
@@ -232,7 +232,7 @@ object Form1: TForm1
         TabOrder = 5
       end
       object Label2: TLabel
-        Left = 288
+        Left = 258
         Height = 15
         Top = 225
         Width = 53
@@ -633,7 +633,7 @@ object Form1: TForm1
         Caption = 'Projection'
       end
       object cbClipLat: TCheckBox
-        Left = 552
+        Left = 554
         Height = 19
         Top = 224
         Width = 84
@@ -641,7 +641,7 @@ object Form1: TForm1
         TabOrder = 16
       end
       object btnToGeoJson: TButton
-        Left = 494
+        Left = 497
         Height = 25
         Hint = 'Copies to clipboard as GeoJson'
         Top = 218
@@ -670,6 +670,18 @@ object Form1: TForm1
         Font.Style = [fsUnderline]
         ParentFont = False
         OnClick = lbRepoUrlClick
+      end
+      object seDecimals: TSpinEdit
+        Left = 456
+        Height = 23
+        Hint = 'Decimal places en JSON'
+        Top = 219
+        Width = 37
+        MaxValue = 16
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 19
+        Value = 4
       end
     end
     object tbsGraphic: TTabSheet
@@ -871,6 +883,7 @@ object Form1: TForm1
       'select * from gpkg_contents'
     )
     Params = <>
+    Macros = <>
     Left = 1080
     Top = 152
   end
@@ -891,6 +904,7 @@ object Form1: TForm1
     Database = SQLite3Connection1
     Transaction = SQLTransaction1
     Params = <>
+    Macros = <>
     Left = 296
     Top = 352
   end
@@ -904,6 +918,7 @@ object Form1: TForm1
     Database = SQLite3Connection1
     Transaction = SQLTransaction1
     Params = <>
+    Macros = <>
     Left = 952
     Top = 352
   end

@@ -34,13 +34,13 @@ type
   public
     Origin_Shift:double;
     constructor Create(ABitmap: TBGRABitmap; AZoomLevel: integer;
-      aLatLeftTop: double; aLonLeftTop: double;aProjectTo:string='EPSG:3857');
+      aLatLeftTop: double; aLonLeftTop: double;aProjectTo:string='EPSG:3857'; aProjectFrom:string='EPSG:4326');
     function CoordToPixelXY(latitude, longitude: double; var pixelX: integer;
       var pixelY: integer): boolean; override;
     function PixelXYToCoord(pixelX, pixelY: integer;
       var latitude: double; var longitude: double):boolean;override;
-    procedure SetupProjection; virtual; overload;
-    procedure SetupProjection(const aTo: string); virtual; overload;
+    procedure SetupProjection; override; overload;
+    procedure SetupProjection(const aTo: string;const aFrom:string='EPSG:4326'); override; overload;
     destructor Destroy; override;
     procedure DrawTiles(aGeoPackage: TGeoPackage; const aTableName: string;
       aOpacity: byte = 255); override;
@@ -66,13 +66,13 @@ const
   EARTH_EQUATORIAL_RADIUS:double = 6378137;
 
 constructor TGeoPackageDrawerProj.Create(ABitmap: TBGRABitmap;
-  AZoomLevel: integer; aLatLeftTop: double; aLonLeftTop: double;aProjectTo:string='EPSG:3857');
+  AZoomLevel: integer; aLatLeftTop: double; aLonLeftTop: double;aProjectTo:string='EPSG:3857'; aProjectFrom:string='EPSG:4326');
 begin
   inherited Create(ABitmap, AZoomLevel, aLatLeftTop, aLonLeftTop);
   FGridTileSize := 16;
   SetLatBounds(-90,90);
   SetLonBounds(-180,180);
-  SetupProjection(aProjectTo);
+  SetupProjection(aProjectTo,aProjectFrom);
 end;
 
 function TGeoPackageDrawerProj.CoordToMeters(latitude, longitude: double;
@@ -196,7 +196,7 @@ end;
 //default projection google maps tiles.
 procedure TGeoPackageDrawerProj.SetupProjection;
 begin
-  SetupProjection('EPSG:3857');
+  SetupProjection('EPSG:3857','EPSG:4326');
 end;
 
 // parse a value in the projection string  +proj=xxx +lon_0=12.5
@@ -228,15 +228,17 @@ begin
   end;
 end;
 
-procedure TGeoPackageDrawerProj.SetupProjection(const aTo: string);
+procedure TGeoPackageDrawerProj.SetupProjection(const aTo: string;const aFrom:string);
 var
   P_for_GIS: PPJ;
   wPX,wPY:integer;
 begin
+  FProjectionTo:=aTo;
+  FProjectionFrom:=aFrom;
   P_for_GIS := nil;
   if P <> nil then
     proj_destroy(P);
-  P := proj_create_crs_to_crs(PJ_DEFAULT_CTX, pansichar('EPSG:4326'),
+  P := proj_create_crs_to_crs(PJ_DEFAULT_CTX, pansichar(aFrom), //pansichar('EPSG:4326'),
     pansichar(aTo), nil);
   if P=nil then
   begin
